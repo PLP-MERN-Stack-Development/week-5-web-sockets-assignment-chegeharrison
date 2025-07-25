@@ -129,4 +129,43 @@ server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
+socket.on('join_room', (room) => {
+  socket.join(room);
+  console.log(`${users[socket.id]?.username} joined room: ${room}`);
+});
+
+socket.on('send_message', ({ room, message }) => {
+  const messageData = {
+    id: Date.now(),
+    sender: users[socket.id]?.username || 'Anonymous',
+    senderId: socket.id,
+    message,
+    room,
+    timestamp: new Date().toISOString(),
+  };
+
+  messages.push(messageData);
+
+  if (messages.length > 100) messages.shift();
+
+  if (room) {
+    io.to(room).emit('receive_message', messageData);
+  } else {
+    io.emit('receive_message', messageData); // fallback for global
+  }
+});
+
+socket.on('message_read', ({ messageId, readerId }) => {
+  const senderSocketId = Object.keys(users).find(
+    (id) => users[id].username === readerId
+  );
+  if (senderSocketId) {
+    io.to(senderSocketId).emit('message_read', { messageId, readBy: users[socket.id].username });
+  }
+});
+app.get('/api/messages/:room', (req, res) => {
+  const roomMessages = messages.filter((msg) => msg.room === req.params.room);
+  res.json(roomMessages);
+});
+
 module.exports = { app, server, io }; 
